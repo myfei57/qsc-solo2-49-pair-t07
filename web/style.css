@@ -38,6 +38,76 @@ header h1 {
   background: #c0392b;
 }
 
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 16px;
+  font-size: 13px;
+}
+
+.identity input {
+  padding: 5px 8px;
+  border: 1px solid #627d98;
+  border-radius: 4px;
+  background: #f0f4f8;
+  color: #1f2933;
+  font-size: 13px;
+  width: 120px;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 24px;
+  font-size: 14px;
+  border-bottom: 3px solid #9fb3c8;
+}
+
+.notice-tag {
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+}
+
+.notice-msg {
+  font-weight: 600;
+}
+
+.notice-meta {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.notice-ok {
+  background: #d3f9d8;
+  border-bottom-color: #1f9d55;
+  color: #0b5a2b;
+}
+
+.notice-input {
+  background: #fff3bf;
+  border-bottom-color: #e6a700;
+  color: #6b4d00;
+}
+
+.notice-rejected {
+  background: #ffe8cc;
+  border-bottom-color: #e8590c;
+  color: #8a3b00;
+}
+
+.notice-failure {
+  background: #ffe3e3;
+  border-bottom-color: #c0392b;
+  color: #7a1818;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
@@ -216,4 +286,46 @@ main {
 
 .step-bad {
   color: #c0392b;
+}
+
+.requests {
+  margin: 10px 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 12px;
+  color: #243b53;
+}
+
+.requests li {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-left: 4px solid #9fb3c8;
+  background: #f0f4f8;
+  border-radius: 3px;
+  word-break: break-all;
+}
+
+.requests li.req-ok {
+  border-left-color: #1f9d55;
+}
+
+.requests li.req-input {
+  border-left-color: #e6a700;
+  background: #fff9db;
+}
+
+.requests li.req-rejected {
+  border-left-color: #e8590c;
+  background: #fff4e6;
+}
+
+.requests li.req-failure {
+  border-left-color: #c0392b;
+  background: #ffe3e3;
+}
+
+.requests li.req-empty {
+  color: #627d98;
+  background: transparent;
+  border-left-color: transparent;
 }

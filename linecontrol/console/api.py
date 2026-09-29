@@ -6,6 +6,7 @@ from flask import Request
 
 from ..domain.events import Event
 from ..domain.kinds import EventKind
+from ..domain.requests import OUTCOMES
 from ..line.machine import Line
 from ..line.workflow import CycleInput
 from ..store.snapshot import snapshot_type_names
@@ -150,6 +151,14 @@ class Api:
 
     def audit_summary(self, request: Request) -> dict[str, object]:
         return {"ok": True, "summary": self.line.audit.summary()}
+
+    def requests(self, request: Request) -> dict[str, object]:
+        limit = int_param(request, "limit", DEFAULT_AUDIT_LIMIT)
+        outcome = request.args.get("outcome", "")
+        if outcome and outcome not in OUTCOMES:
+            raise ApiParamError("outcome", outcome)
+        records = self.line.audit.query_requests(outcome, limit)
+        return {"ok": True, "requests": [record.to_dict() for record in records]}
 
     def weld_seams(self, request: Request) -> dict[str, object]:
         limit = int_param(request, "limit", DEFAULT_SEAM_LIMIT)

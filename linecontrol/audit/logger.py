@@ -8,12 +8,13 @@ from .alarm import AlarmOps
 from .handle import HandleOps
 from .log import LogOps
 from .query import QueryOps
+from .requests import RequestOps
 from .state import AuditState
 from .summary import SummaryOps
 
 
-class Logger(LogOps, AlarmOps, QueryOps, SummaryOps, HandleOps):
-    """Stores every process event and the current alarm register."""
+class Logger(LogOps, RequestOps, AlarmOps, QueryOps, SummaryOps, HandleOps):
+    """Stores every process event, request record and the current alarm register."""
 
     def __init__(self, store: FileStore, bus: EventBus) -> None:
         self._store = store

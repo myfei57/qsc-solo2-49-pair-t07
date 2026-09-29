@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..domain.events import Event
+from ..domain.requests import RequestRecord
 
 #: Number of events kept in memory and on disk.
 MAX_EVENTS = 500
@@ -16,6 +17,7 @@ DEFAULT_QUERY_LIMIT = 50
 @dataclass(slots=True)
 class AuditState:
     events: list[Event] = field(default_factory=list)
+    requests: list[RequestRecord] = field(default_factory=list)
     alarms: dict[str, bool] = field(default_factory=dict)
 
     def trim(self, keep: int = MAX_EVENTS) -> int:

@@ -2,21 +2,80 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
+from uuid import uuid4
 
 from flask import Flask, Response, jsonify, request, send_from_directory
 
+from ..domain.requests import (
+    OUTCOME_FAILURE,
+    OUTCOME_INPUT,
+    OUTCOME_OK,
+    OUTCOME_REJECTED,
+    OUTCOMES,
+    RequestRecord,
+)
 from ..line.machine import Line
 from .api import Api, ApiParamError
 
 Handler = Callable[[object], dict[str, object]]
+
+LOGGER = logging.getLogger("linecontrol.console")
 
 #: Content types served from the static web root.
 STATIC_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "application/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
+}
+
+#: Header carrying the logged-in operator's display name.
+OPERATOR_HEADER = "X-Operator"
+
+#: Set by the browser on unattended polling calls so they do not fill the trail.
+AUTO_HEADER = "X-Auto-Request"
+
+#: Outcome tag -> HTTP status used for every error reply.
+ERROR_STATUS = {
+    OUTCOME_INPUT: 400,
+    OUTCOME_REJECTED: 409,
+    OUTCOME_FAILURE: 500,
+}
+
+#: Outcome tag -> message shown when the exception carries none of its own.
+GENERIC_MESSAGE = {
+    OUTCOME_INPUT: "请求参数有误，请检查输入",
+    OUTCOME_REJECTED: "当前设备状态不允许此操作",
+    OUTCOME_FAILURE: "服务器内部错误，请联系维护人员",
+}
+
+#: Domain error codes -> wording an operator on the floor understands.
+CODE_MESSAGE = {
+    "level-low": "槽体液位低于最低允许值，请先补液",
+    "strip-run": "带钢正在运行，不能执行该操作",
+    "no-replenish": "当前工况不允许补酸",
+    "no-coil": "没有载入钢卷，请先上卷",
+    "interlock-held": "焊接联锁未释放，不能执行该操作",
+    "alarm-active": "存在活动告警，请先复位告警",
+    "rinse-active": "喷淋正在进行，不能执行该操作",
+    "track-stale": "焊缝跟踪数据过期，请先刷新跟踪",
+    "tank-volume": "槽体容积必须为正数",
+    "offset-invalid": "偏移值超出允许范围",
+    "no-exhaust": "排风未建立，不能升温",
+    "dew-high": "露点温度过高，不能继续升温",
+    "temp-range": "温度超出允许范围",
+    "tail-unflushed": "带尾残酸未冲净，不能停机/换卷",
+    "no-speed": "速度设定无效",
+    "invalid-gain": "增益必须为正数",
+    "invalid-speed": "目标速度必须为正数",
+    "not-persisted": "张力数据未落盘，不能执行该操作",
+    "ramp-unready": "张力尚未稳定，不能提速",
+    "align-pending": "对中尚未确认，不能焊接",
+    "arc-blocked": "焊接电弧门关闭，禁止起弧",
+    "latch-held": "联锁锁扣保持中，不能执行该操作",
+    "power-invalid": "焊接电压/电流超出允许范围",
 }
 
 
@@ -34,6 +93,7 @@ def _route_table(api: Api) -> tuple[tuple[str, str, Handler], ...]:
         ("/api/events", "GET", api.events),
         ("/api/audit", "GET", api.audit),
         ("/api/audit/summary", "GET", api.audit_summary),
+        ("/api/requests", "GET", api.requests),
         ("/api/weld/confirm", "POST", api.weld_confirm),
         ("/api/weld/splice", "POST", api.weld_splice),
         ("/api/weld/power", "POST", api.weld_power),
@@ -69,29 +129,102 @@ def _route_table(api: Api) -> tuple[tuple[str, str, Handler], ...]:
     )
 
 
-def _error_payload(error: Exception) -> dict[str, object]:
-    payload: dict[str, object] = {"ok": False, "error": str(error)}
+def _operator() -> str:
+    raw = (request.headers.get(OPERATOR_HEADER, "") or "").strip()
+    return raw[:32] if raw else "anonymous"
+
+
+def _error_payload(outcome: str, error: Exception, ref: str) -> dict[str, object]:
+    """Build the categorised error body shared with the browser."""
+
+    code = getattr(error, "code", None)
+    code_value = code.value if code is not None else ""
+    fallback = GENERIC_MESSAGE[outcome]
+    message = (
+        CODE_MESSAGE.get(code_value)
+        or getattr(error, "detail", "")
+        or str(error)
+        or fallback
+    )
+    payload: dict[str, object] = {
+        "ok": False,
+        "type": outcome,
+        "code": code_value,
+        "error": message,
+        "ref": ref,
+    }
     describe = getattr(error, "to_dict", None)
     if callable(describe):
-        payload["detail"] = describe()
+        detail = describe()
+        payload["detail"] = detail
+        technical = detail.get("detail") if isinstance(detail, dict) else ""
+        if technical and technical != message:
+            payload["technical"] = technical
     return payload
 
 
-def _bind(handler: Handler) -> Callable[[], tuple[Response, int]]:
-    """Wrap a handler so parameter and domain failures become JSON replies."""
+def _bind(api: Api, handler: Handler) -> Callable[[], tuple[Response, int]]:
+    """Wrap a handler: categorise errors and append a request audit record."""
 
-    def view() -> tuple[Response, int]:
+    def view() -> tuple[Response, int] | Response:
+        ref = uuid4().hex[:8]
+        outcome = OUTCOME_OK
+        status = 200
+        body: dict[str, object] = {}
         try:
-            payload = handler(request)
+            body = handler(request)
+            body.setdefault("ref", ref)
         except ApiParamError as error:
-            return jsonify({"ok": False, "error": str(error)}), 400
+            outcome = OUTCOME_INPUT
+            status = ERROR_STATUS[outcome]
+            body = _error_payload(outcome, error, ref)
+            body["error"] = f"参数 {error.name} 填写有误，请检查（原值：{error.raw or '空'}）"
+        except ValueError as error:
+            # e.g. an invalid enum query value slipped past the param parser
+            outcome = OUTCOME_INPUT
+            status = ERROR_STATUS[outcome]
+            body = _error_payload(outcome, error, ref)
         except RuntimeError as error:
-            return jsonify(_error_payload(error)), 409
-        return jsonify(payload), 200
+            outcome = OUTCOME_REJECTED
+            status = ERROR_STATUS[outcome]
+            body = _error_payload(outcome, error, ref)
+        except Exception as error:  # noqa: BLE001 - last-resort envelope for the UI
+            outcome = OUTCOME_FAILURE
+            status = ERROR_STATUS[outcome]
+            LOGGER.exception("request %s %s failed", request.method, request.path)
+            body = _error_payload(outcome, error, ref)
+        _record(api, outcome, status, body)
+        return jsonify(body), status
 
     view.__name__ = getattr(handler, "__name__", "handler")
     view.__doc__ = getattr(handler, "__doc__", None)
     return view
+
+
+def _record(
+    api: Api, outcome: str, status: int, body: dict[str, object]
+) -> None:
+    """Persist one operator request; polling successes are dropped to avoid noise."""
+
+    automatic = request.headers.get(AUTO_HEADER, "").strip() == "1"
+    if automatic and outcome == OUTCOME_OK:
+        return
+    record = RequestRecord(
+        method=request.method,
+        path=request.path,
+        operator=_operator(),
+        status=status,
+        outcome=outcome,
+        message=str(body.get("error", "")) if outcome != OUTCOME_OK else "",
+        code=str(body.get("code", "")) if outcome != OUTCOME_OK else "",
+        remote=request.remote_addr or "",
+        ref=str(body.get("ref", "")),
+        params={key: request.args.get(key, "") for key in request.args},
+    )
+    try:
+        api.line.audit.record_request(record)
+    except Exception:  # noqa: BLE001 - logging must never break the response
+        LOGGER.exception("could not persist request record for %s", request.path)
 
 
 def create_app(line: Line, web_dir: str | Path) -> Flask:
@@ -109,7 +242,7 @@ def create_app(line: Line, web_dir: str | Path) -> Flask:
         app.add_url_rule(
             rule,
             endpoint=handler.__name__,
-            view_func=_bind(handler),
+            view_func=_bind(api, handler),
             methods=[method],
         )
 

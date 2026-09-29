@@ -9,8 +9,13 @@
 <body>
 <header>
   <h1>连续酸洗线控制台</h1>
+  <div class="identity">
+    <label for="operator">操作人</label>
+    <input id="operator" type="text" maxlength="32" placeholder="填写姓名" autocomplete="off">
+  </div>
   <span id="phase" class="badge">idle</span>
 </header>
+<div id="notice" class="notice hidden" role="alert"></div>
 <nav class="tabs">
   <button class="tab" data-tab="overview">总览</button>
   <button class="tab" data-tab="ops">操作</button>
@@ -185,6 +190,23 @@
     <div class="panel">
       <h2>最近事件</h2>
       <ol id="auditList" class="audit"></ol>
+    </div>
+    <div class="panel">
+      <h2>操作记录</h2>
+      <form class="inline" data-form="request-query">
+        <label>结果
+          <select name="outcome">
+            <option value="">全部</option>
+            <option value="ok">成功</option>
+            <option value="input">参数错误</option>
+            <option value="rejected">设备拒绝</option>
+            <option value="failure">系统错误</option>
+          </select>
+        </label>
+        <label>条数<input name="limit" type="number" step="1" value="30"></label>
+        <button type="submit">查询</button>
+      </form>
+      <ol id="requestList" class="requests"></ol>
     </div>
     <div class="panel">
       <h2>流程步骤</h2>
