@@ -67,6 +67,18 @@ def save_events(store: FileStore, key: str, events: list[dict]) -> None:
 
 
 def load_events(store: FileStore, key: str) -> list[dict]:
+    return load_items(store, key)
+
+
+def save_requests(store: FileStore, key: str, records: list[dict]) -> None:
+    store.save(key, json.dumps(records, ensure_ascii=False).encode("utf-8"))
+
+
+def load_requests(store: FileStore, key: str) -> list[dict]:
+    return load_items(store, key)
+
+
+def load_items(store: FileStore, key: str) -> list[dict]:
     raw = store.load(key)
     if raw is None or not raw.strip():
         return []

@@ -217,3 +217,113 @@ main {
 .step-bad {
   color: #c0392b;
 }
+
+.notice {
+  margin: 10px 24px 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+
+.notice .notice-title {
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.notice .notice-code {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #627d98;
+}
+
+.notice.input {
+  background: #fff8e1;
+  border-color: #e0b400;
+  color: #6b4e00;
+}
+
+.notice.denied {
+  background: #fdecea;
+  border-color: #c0392b;
+  color: #8a1c13;
+}
+
+.notice.error {
+  background: #f0e8ff;
+  border-color: #6a1b9a;
+  color: #4a148c;
+}
+
+.notice.ok {
+  background: #e6ffed;
+  border-color: #1f9d55;
+  color: #14532d;
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #627d98;
+}
+
+.tablewrap {
+  overflow-x: auto;
+}
+
+.reqtable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.reqtable th,
+.reqtable td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #e1e8f0;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.reqtable td.params,
+.reqtable td.reason {
+  white-space: normal;
+  max-width: 260px;
+}
+
+.reqtable tr.row-failed {
+  background: #fdecea;
+}
+
+.reqtable tr.row-input {
+  background: #fff8e1;
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.tag.ok {
+  background: #d1f5df;
+  color: #14532d;
+}
+
+.tag.input {
+  background: #ffecb3;
+  color: #6b4e00;
+}
+
+.tag.denied {
+  background: #f8c4be;
+  color: #8a1c13;
+}
+
+.tag.error {
+  background: #e1bee7;
+  color: #4a148c;
+}

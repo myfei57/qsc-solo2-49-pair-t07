@@ -6,6 +6,7 @@ from flask import Request
 
 from ..domain.events import Event
 from ..domain.kinds import EventKind
+from ..domain.requests import RESULT_OK, RequestRecord
 from ..line.machine import Line
 from ..line.workflow import CycleInput
 from ..store.snapshot import snapshot_type_names
@@ -18,6 +19,45 @@ DEFAULT_AUDIT_LIMIT = 50
 
 #: Default page size for the seam history.
 DEFAULT_SEAM_LIMIT = 20
+
+#: Default page size for the operator request log.
+DEFAULT_REQUEST_LIMIT = 50
+
+#: Chinese name shown in the request log for each action key.
+ACTION_LABELS: dict[str, str] = {
+    "weld.confirm": "焊接并提速",
+    "weld.splice": "新接头并刷新跟踪",
+    "weld.power": "下发焊接功率",
+    "weld.alarm": "过流告警",
+    "weld.clear": "告警复位",
+    "weld.release": "联锁释放",
+    "tension.calibrate": "标定张力增益",
+    "tension.ramp": "执行提速",
+    "pump.start": "启动酸循环",
+    "pump.resume": "恢复酸循环",
+    "pump.replenish": "补酸计算",
+    "pickle.calibrate": "标定酸浓度",
+    "dry.heat": "排风升温并换卷",
+    "dry.dew": "设置露点",
+    "dry.heat-target": "升温一步",
+    "dry.reheat": "故障后复热",
+    "exit.coil-change": "换卷",
+    "exit.taper": "出口锥度计算",
+    "exit.weight": "估算卷重",
+    "exit.shear-offset": "设置剪切偏移",
+    "entry.offset": "调整对中",
+    "entry.correct": "对中纠偏",
+    "entry.sample": "位置采样",
+    "head.track": "跟踪带头",
+    "strip.advance": "推进带钢",
+    "strip.speed": "下发带钢速度",
+    "stop": "停机",
+    "cycle": "整卷联动",
+}
+
+
+def action_label(action: str) -> str:
+    return ACTION_LABELS.get(action, action)
 
 
 class ApiParamError(ValueError):
@@ -34,9 +74,13 @@ def float_param(request: Request, name: str) -> float:
     if raw == "":
         raise ApiParamError(name, raw)
     try:
-        return float(raw)
+        value = float(raw)
     except ValueError as error:
         raise ApiParamError(name, raw) from error
+    # NaN would slip through float() but is never a valid operator entry.
+    if value != value:
+        raise ApiParamError(name, raw)
+    return value
 
 
 def int_param(request: Request, name: str, default: int) -> int:
@@ -67,6 +111,66 @@ class Api:
             unsubscribe()
         self._unsubscribe = []
         self.line.close()
+
+    # -- operator request audit ----------------------------------------
+
+    def record_request(
+        self,
+        action: str,
+        request: Request,
+        result: str,
+        status: int,
+        duration_ms: int,
+        handle: str,
+        code: str = "",
+        message: str = "",
+    ) -> RequestRecord:
+        """Persist one operator request, successful or refused."""
+
+        params = {key: request.args.get(key, "") for key in sorted(request.args.keys())}
+        record = RequestRecord(
+            action=action,
+            label=action_label(action),
+            method=request.method,
+            path=request.path,
+            operator=self.operator_of(request),
+            ok=result == RESULT_OK,
+            result=result,
+            status=status,
+            code=code,
+            message=message,
+            params=params,
+            duration_ms=duration_ms,
+            handle=handle,
+        )
+        self.line.audit.record_request(record)
+        return record
+
+    @staticmethod
+    def operator_of(request: Request) -> str:
+        """Identify the operator from the header, falling back to the host.
+
+        HTTP headers arrive decoded as latin-1, so a UTF-8 operator name
+        (Chinese names are the norm here) has to be re-decoded to survive.
+        """
+
+        operator = request.headers.get("X-Operator", "").strip()
+        if operator:
+            try:
+                operator = operator.encode("latin-1").decode("utf-8").strip()
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                pass
+            return operator[:64]
+        return request.remote_addr or "unknown"
+
+    def requests(self, request: Request) -> dict[str, object]:
+        limit = int_param(request, "limit", DEFAULT_REQUEST_LIMIT)
+        failed_only = request.args.get("failed", "") in {"1", "true", "yes"}
+        operator = request.args.get("operator", "").strip()
+        records = self.line.audit.recent_requests(limit, failed_only)
+        if operator:
+            records = [record for record in records if record.operator == operator]
+        return {"ok": True, "requests": [record.to_dict() for record in records]}
 
     def stream_view(self) -> list[dict[str, object]]:
         return [event.to_dict() for event in self.stream]
@@ -143,7 +247,11 @@ class Api:
         limit = int_param(request, "limit", DEFAULT_AUDIT_LIMIT)
         raw_kind = request.args.get("kind", "")
         if raw_kind:
-            events = self.line.audit_query(EventKind(raw_kind), limit)
+            try:
+                kind = EventKind(raw_kind)
+            except ValueError as error:
+                raise ApiParamError("kind", raw_kind) from error
+            events = self.line.audit_query(kind, limit)
         else:
             events = self.line.audit_query(None, limit)
         return {"ok": True, "events": [event.to_dict() for event in events]}

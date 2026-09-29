@@ -33,6 +33,8 @@ class RecoveryOps:
         self.strip.restore_track(state.track)
         self.audit.restore()
         self.audit.flush()
+        self.audit.restore_requests()
+        self.audit.flush_requests()
         if state.rinse.active:
             self.pickle.rinse_stop()
         self.exit.recover_lift()

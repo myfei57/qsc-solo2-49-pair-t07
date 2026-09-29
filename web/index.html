@@ -11,6 +11,7 @@
   <h1>连续酸洗线控制台</h1>
   <span id="phase" class="badge">idle</span>
 </header>
+<div id="notice" class="notice hidden"></div>
 <nav class="tabs">
   <button class="tab" data-tab="overview">总览</button>
   <button class="tab" data-tab="ops">操作</button>
@@ -150,6 +151,16 @@
 
   <section id="tab-audit" class="tabpage hidden">
     <div class="panel">
+      <h2>操作工号</h2>
+      <form class="inline" id="operatorForm">
+        <label>当前操作工
+          <input name="operator" id="operatorInput" type="text" maxlength="32" placeholder="如 张三 / 工号">
+        </label>
+        <button type="submit">记住工号</button>
+      </form>
+      <p class="hint">工号会随每次操作一起记录，用于事后追溯。</p>
+    </div>
+    <div class="panel">
       <h2>事件统计</h2>
       <ul id="summary" class="summary"></ul>
     </div>
@@ -181,6 +192,32 @@
         <label>条数<input name="limit" type="number" step="1" value="30"></label>
         <button type="submit">查询</button>
       </form>
+    </div>
+    <div class="panel" style="grid-column: 1 / -1;">
+      <h2>操作记录（每次按钮/表单请求都留痕）</h2>
+      <form class="inline" id="requestQueryForm">
+        <label>条数<input name="limit" type="number" step="1" value="50"></label>
+        <label>筛选
+          <select name="filter">
+            <option value="all">全部请求</option>
+            <option value="failed">仅失败/被拒</option>
+            <option value="input">仅参数填错</option>
+            <option value="denied">仅设备不允许</option>
+          </select>
+        </label>
+        <button type="submit">查询</button>
+      </form>
+      <div class="tablewrap">
+        <table id="requestTable" class="reqtable">
+          <thead>
+            <tr>
+              <th>时间</th><th>操作工</th><th>操作</th><th>结果</th>
+              <th>原因/说明</th><th>参数</th><th>耗时</th><th>关联号</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
     <div class="panel">
       <h2>最近事件</h2>

@@ -8,12 +8,13 @@ from .alarm import AlarmOps
 from .handle import HandleOps
 from .log import LogOps
 from .query import QueryOps
+from .request_log import RequestLogOps
 from .state import AuditState
 from .summary import SummaryOps
 
 
-class Logger(LogOps, AlarmOps, QueryOps, SummaryOps, HandleOps):
-    """Stores every process event and the current alarm register."""
+class Logger(LogOps, RequestLogOps, AlarmOps, QueryOps, SummaryOps, HandleOps):
+    """Stores every process event, operator request and the alarm register."""
 
     def __init__(self, store: FileStore, bus: EventBus) -> None:
         self._store = store
@@ -35,6 +36,7 @@ class Logger(LogOps, AlarmOps, QueryOps, SummaryOps, HandleOps):
     def snapshot(self) -> dict[str, object]:
         return {
             "events": [event.to_dict() for event in self.recent(20)],
+            "requests": [record.to_dict() for record in self.recent_requests(20)],
             "alarms": self.active_alarms(),
             "summary": self.summary(),
         }
